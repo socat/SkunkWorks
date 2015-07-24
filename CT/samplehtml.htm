@@ -1,0 +1,29 @@
+﻿<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<html>
+<head>
+    <title></title>
+</head>
+<body>
+<script type="text/javascript">
+	
+        function scrollToSelector(selector) {
+    $('html, body').animate({ scrollTop: $(selector).offset().top }, 500);
+}
+
+    $(document).ready(function() {
+	$('a[href^="#"]').on('click', function(e) {
+		e.preventDefault();
+        $('html, body').animate({ scrollTop: $(this).offset().top }, 500);
+		
+	});
+    // replaces default functionality of bookmark links if the 'bookmark-link' css class is applied.
+    // scrolling is slow enough to follow rather than snapping-to the desired position.
+    $('.bookmark-link').click(function(event) {
+        // if href is not null or empty and begins with a '#' character
+        if ($(this).attr('href') != null && $(this).attr('href') != '' && $(this).attr('href').substring(0, 1) == '#') {
+            scrollToSelector($(this).attr('href'));
+            // return false to override default URL-click functionality.
+            return false;
+        }
+    });
+});

@@ -1,0 +1,194 @@
+﻿
+Try-Catch
+-----------------------
+
+> It is as though the lack of information from "Availability" is interfering with the parameters after and not displaying anything.
+
+Correct, `moDisk["Availability"]` is `null`, and converting null `.ToString()` is causing your application to throw a `System.NullReferenceException`.  
+When this occurs, execution is immediately handed over to the `catch` block.
+Removing the `.ToString()` in this case would prevent the `System.NullReferenceException` on conversion to string.  
+
+Now if we update your code to prevent a `System.NullReferenceException` by removing unnecessary conversion to a string `.ToString()`, we are going to run into a `System.Management.ManagementException` occuring when you reference `moDisk["CapabilityDescription"]` due to a misspelling (it's plural).
+
+
+
+
+
+
+
+
+
+Extra credit: create a Win32_DiskDrive model, let reflection do the heavy lifting
+----------
+
+Having a model of the WMI data will result in cleaner code and help decouple and componentize a lot of the complicated work from the UI.
+
+And instead of a pattern that is prone to error because we're all prone to mistakes and leave off the trailing "S":
+
+    lblName.Text = mgmtObjQuery["CapabilityDescription"]
+
+Referencing the correct property is simple with intellisense, and any spelling mistakes will be caught at compile time:
+
+    lblName.Text = disk.CapabilityDescriptions;
+
+
+First, lets create a model for the WMI class.  Make sure the class name is identical to the WMI class, and the field names are identical to those in the WMI class.
+
+Go to the [MSDN reference for Win32_DiskDrive][1], and generate a class that looks like this:  
+
+    /// <summary>
+    /// A Win32_DiskDrive class based on 
+    /// http://msdn.microsoft.com/en-us/library/windows/desktop/aa394132(v=vs.85).aspx
+    /// </summary>
+    public class Win32_DiskDrive 
+    {
+        public UInt16 Availability;
+        public UInt32 BytesPerSector;
+        public UInt16[] Capabilities ;
+        public string[] CapabilityDescriptions ;
+        public string Caption;
+        public string CompressionMethod;
+        public UInt32 ConfigManagerErrorCode;
+        public bool ConfigManagerUserConfig;
+        public string CreationClassName;
+        public UInt64 DefaultBlockSize;
+        public string Description;
+        public string DeviceID;
+        public bool ErrorCleared;
+        public string ErrorDescription;
+        public string ErrorMethodology;
+        public string FirmwareRevision;
+        public UInt32 Index;
+        public DateTime InstallDate;
+        public string InterfaceType;
+        public UInt32 LastErrorCode;
+        public string Manufacturer;
+        public UInt64 MaxBlockSize;
+        public UInt64 MaxMediaSize;
+        public bool MediaLoaded;
+        public string MediaType;
+        public UInt64 MinBlockSize;
+        public string Model;
+        public string Name;
+        public bool NeedsCleaning;
+        public UInt32 NumberOfMediaSupported;
+        public UInt32 Partitions;
+        public string PNPDeviceID;
+        public UInt16[] PowerManagementCapabilities ;
+        public bool PowerManagementSupported;
+        public UInt32 SCSIBus;
+        public UInt16 SCSILogicalUnit;
+        public UInt16 SCSIPort;
+        public UInt16 SCSITargetId;
+        public UInt32 SectorsPerTrack;
+        public string SerialNumber;
+        public UInt32 Signature;
+        public UInt64 Size;
+        public string Status;
+        public UInt16 StatusInfo;
+        public string SystemCreationClassName;
+        public string SystemName;
+        public UInt64 TotalCylinders;
+        public UInt32 TotalHeads;
+        public UInt64 TotalSectors;
+        public UInt64 TotalTracks;
+        public UInt32 TracksPerCylinder;
+
+        public Win32_DiskDrive() { }
+    }
+
+
+Using Reflection to match the field names with the corresponding WMI property, we will only assign a value if it exists and always have the correct name.
+A generic method uses type parameters and would be ideal for a solution where you want to consolidate all of your local WMI calls.  
+
+
+
+    /// <summary>
+    /// Generic method that uses reflection for wiring up a local class to the corresponding win32_class and properties.
+    /// </summary>
+    /// <typeparam name="T">A class who's name and fields correspond to those of a WMI class.</typeparam>
+    /// <returns>A collection of WMI data.</returns>
+    public static IEnumerable<T> WmiSnapshot<T>()
+    {
+        // The name of T must match that of the WMI class
+        var searcher = new ManagementObjectSearcher(new SelectQuery(Activator.CreateInstance<T>().GetType().Name));
+
+        foreach (ManagementObject managementObject in searcher.Get())
+        {
+            // Creates an instance of T
+            var listItem = Activator.CreateInstance<T>();
+
+            // an array of PUBLIC FIELDS of T
+            var fields = listItem.GetType().GetFields();
+            
+            // matches a value from the WMI query to a field name
+            foreach (FieldInfo field in fields)
+            {
+                if (managementObject[field.Name] != null)
+                {
+                    field.SetValue(listItem,
+                        field.FieldType == typeof(DateTime)
+                            ? ManagementDateTimeConverter.ToDateTime(managementObject[field.Name].ToString())
+                            : Convert.ChangeType(managementObject[field.Name], field.FieldType)); 
+                }
+            }
+            yield return listItem;
+        }
+    }
+
+I keep my WMI classes and WMI helper methods in their own class to invoke from the UI.  The UI code is easier to read and much easier to debug.
+
+Here is a quick sample that outputs the results of this snapshot to the console: 
+
+
+    var disks = WmiHelper.WmiSnapshot<Win32_DiskDrive>().ToList(); 
+
+    StringBuilder sb = new StringBuilder(); 
+
+    foreach (Win32_DiskDrive disk in disks)
+    {
+        sb.AppendFormat("SystemName: {0}\r\n", disk.SystemName);
+        sb.AppendFormat("Type: {0}\r\n",  disk.MediaType);
+        sb.AppendFormat("Model: {0}\r\n",  disk.Model);
+        sb.AppendFormat("Capacity: {0}\r\n", disk.Size );
+        sb.AppendFormat("Partitions: {0}\r\n", disk.Partitions);
+        sb.AppendFormat("Sectors: {0}\r\n",  disk.SectorsPerTrack);
+        sb.AppendFormat("Signature: {0}\r\n", disk.Signature);
+        sb.AppendFormat("Firmware: {0}\r\n",  string.IsNullOrEmpty(disk.FirmwareRevision) ? "Not Available" : disk.FirmwareRevision);
+        sb.AppendFormat("Capability Description: {0}\r\n", string.Join("\r\n", disk.CapabilityDescriptions));
+        sb.AppendFormat("Availability: {0}\r\n", disk.Availability);
+        sb.AppendFormat("Bytes per Sector: {0}\r\n", disk.BytesPerSector);
+        sb.AppendFormat("Device ID: {0}\r\n", disk.DeviceID);
+        sb.AppendLine();
+    }
+
+    Console.WriteLine(sb.ToString());
+
+The output looks something like this:
+
+<pre>
+SystemName: UVVXWVXXWV
+Type: Fixed hard disk media
+Model: ST9500420AS
+Capacity: 500105249280
+Partitions: 4
+Sectors: 63
+Signature: 2210653369
+Firmware: 0006
+Capability Description: Random Access
+Supports Writing
+SMART Notification
+Availability: 0
+Bytes per Sector: 512
+Device ID: \\.\PHYSICALDRIVE0
+</pre>
+
+Now repeat the same for [Win32_ComputerSystem][2] then [Win32_Product][3]!
+
+Let me know if that puts you in the right direction.
+
+
+  [1]: http://msdn.microsoft.com/en-us/library/windows/desktop/aa394132%28v=vs.85%29.aspx
+  [2]: http://msdn.microsoft.com/en-us/library/windows/desktop/aa394102%28v=vs.85%29.aspx
+  [3]: http://msdn.microsoft.com/en-us/library/windows/desktop/aa394378%28v=vs.85%29.aspx
+

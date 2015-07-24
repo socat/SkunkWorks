@@ -1,0 +1,6 @@
+<Modules>
+  <Module PersistentId="80DC998D-46C7-41AE-B968-9E0CD134F391" ModuleId="CT" />
+  <Module PersistentId="112E4A64-E6B6-43D7-99A9-54A39B20342B" ModuleId="HelperLibrary" />
+  <Module PersistentId="693F0E6E-31E8-48CB-BDE4-809B57E9A71F" ModuleId="LipsumGenerator.Tests" />
+  <Module PersistentId="F5458D64-AB69-46FB-825B-7886782A304C" ModuleId="LipsumGenerator" />
+</Modules>
